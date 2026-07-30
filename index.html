@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>HM Chat</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+:root{
+  --primary:#0b93f6;
+  --primary-dark:#0a7fd6;
+  --bg:#0e1621;
+  --surface:#182533;
+  --surface-2:#1f2c3c;
+  --bubble-mine:#0b93f6;
+  --bubble-theirs:#1f2c3c;
+  --text:#e9edf1;
+  --text-dim:#8596a8;
+  --danger:#ff5252;
+  --online:#3ddc84;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{
+  font-family:'Segoe UI',Roboto,-apple-system,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  overflow:hidden;
+}
+#app{height:100vh;height:100dvh;display:flex;flex-direction:column;position:relative;max-width:520px;margin:0 auto;background:var(--bg);box-shadow:0 0 40px rgba(0,0,0,.4);}
+.hidden{display:none !important;}
+button{font-family:inherit;cursor:pointer;border:none;outline:none;background:none;color:inherit;}
+input,textarea{font-family:inherit;outline:none;border:none;background:none;color:inherit;}
+
+/* ---------- Auth screen ---------- */
+#authScreen{flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px 28px;background:linear-gradient(160deg,#0e1621,#132030);}
+.auth-logo{width:72px;height:72px;border-radius:20px;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:700;margin:0 auto 18px;box-shadow:0 8px 24px rgba(11,147,246,.4);}
+.auth-title{text-align:center;font-size:24px;font-weight:600;margin-bottom:4px;}
+.auth-sub{text-align:center;color:var(--text-dim);font-size:14px;margin-bottom:28px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;}
+.field input{width:100%;padding:14px 16px;background:var(--surface);border-radius:12px;font-size:15px;border:1px solid #263547;}
+.field input:focus{border-color:var(--primary);}
+.btn-primary{width:100%;padding:15px;background:var(--primary);border-radius:12px;font-size:16px;font-weight:600;margin-top:6px;transition:.15s;}
+.btn-primary:active{background:var(--primary-dark);transform:scale(.98);}
+.auth-switch{text-align:center;margin-top:20px;font-size:14px;color:var(--text-dim);}
+.auth-switch span{color:var(--primary);font-weight:600;}
+.auth-error{background:rgba(255,82,82,.15);color:var(--danger);padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:14px;text-align:center;}
+
+/* ---------- App bar ---------- */
+.appbar{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;
+  background:var(--surface);border-bottom:1px solid #1a2733;
+  flex-shrink:0;
+}
+.appbar h1{font-size:19px;font-weight:600;flex:1;}
+.icon-btn{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;transition:.15s;}
+.icon-btn:active{background:rgba(255,255,255,.08);}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;overflow:hidden;flex-shrink:0;}
+.avatar img{width:100%;height:100%;object-fit:cover;}
+
+/* ---------- Search ---------- */
+.search-bar{padding:10px 14px;background:var(--surface);flex-shrink:0;}
+.search-bar input{width:100%;background:var(--surface-2);padding:10px 14px;border-radius:20px;font-size:14px;}
+
+/* ---------- Tabs ---------- */
+.tabs{display:flex;background:var(--surface);border-bottom:1px solid #1a2733;flex-shrink:0;}
+.tab{flex:1;text-align:center;padding:12px 0;font-size:13px;font-weight:600;color:var(--text-dim);border-bottom:2px solid transparent;}
+.tab.active{color:var(--primary);border-color:var(--primary);}
+
+/* ---------- List screen ---------- */
+#listScreen{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.list-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.list-item{display:flex;align-items:center;gap:12px;padding:12px 16px;transition:.1s;}
+.list-item:active{background:rgba(255,255,255,.05);}
+.list-item .avatar{width:48px;height:48px;font-size:18px;position:relative;}
+.status-dot{width:11px;height:11px;border-radius:50%;background:var(--online);position:absolute;bottom:0;right:0;border:2px solid var(--surface);}
+.list-item-content{flex:1;min-width:0;}
+.list-item-name{font-size:15px;font-weight:600;}
+.list-item-sub{font-size:13px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.empty-state{text-align:center;color:var(--text-dim);padding:60px 30px;font-size:14px;line-height:1.6;}
+
+.fab{
+  position:absolute;bottom:22px;right:22px;width:56px;height:56px;border-radius:50%;
+  background:var(--primary);display:flex;align-items:center;justify-content:center;
+  font-size:26px;box-shadow:0 6px 18px rgba(11,147,246,.5);z-index:5;transition:.15s;
+}
+.fab:active{transform:scale(.94);}
+
+/* ---------- Chat screen ---------- */
+#chatScreen{flex:1;display:none;flex-direction:column;overflow:hidden;}
+#chatScreen.active{display:flex;}
+.chat-appbar{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border-bottom:1px solid #1a2733;flex-shrink:0;}
+.chat-appbar .name-block{flex:1;min-width:0;}
+.chat-appbar .name-block .n{font-size:15px;font-weight:600;}
+.chat-appbar .name-block .s{font-size:12px;color:var(--text-dim);}
+.messages{flex:1;overflow-y:auto;padding:14px 10px;display:flex;flex-direction:column;gap:3px;-webkit-overflow-scrolling:touch;background:
+  radial-gradient(circle at 20% 20%, rgba(255,255,255,.02) 0%, transparent 50%),var(--bg);}
+.bubble-row{display:flex;max-width:100%;}
+.bubble-row.mine{justify-content:flex-end;}
+.bubble{max-width:76%;padding:9px 12px;border-radius:16px;font-size:14.5px;line-height:1.4;position:relative;word-wrap:break-word;}
+.bubble-row.mine .bubble{background:var(--bubble-mine);border-bottom-right-radius:4px;}
+.bubble-row.theirs .bubble{background:var(--bubble-theirs);border-bottom-left-radius:4px;}
+.bubble .sender{font-size:11.5px;font-weight:700;color:#8ecbff;margin-bottom:2px;}
+.bubble-row.mine .bubble .sender{display:none;}
+.bubble .time{font-size:10px;color:rgba(255,255,255,.55);margin-top:3px;text-align:right;}
+.bubble.deleted{font-style:italic;color:var(--text-dim);background:transparent;border:1px dashed #2a3a4d;}
+.bubble-row.pending .bubble{opacity:.55;}
+.bubble img,.bubble video{max-width:100%;border-radius:10px;display:block;margin-bottom:4px;}
+.bubble audio{width:220px;max-width:60vw;}
+.reactions-row{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;}
+.reaction-chip{background:rgba(255,255,255,.12);border-radius:10px;padding:1px 7px;font-size:12px;}
+
+.composer{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;background:var(--surface);border-top:1px solid #1a2733;flex-shrink:0;}
+.composer textarea{flex:1;background:var(--surface-2);border-radius:20px;padding:10px 16px;font-size:14.5px;max-height:100px;resize:none;line-height:1.4;}
+.round-btn{width:42px;height:42px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;transition:.15s;}
+.round-btn.send{background:var(--primary);}
+.round-btn:active{transform:scale(.92);}
+.round-btn.recording{background:var(--danger);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.6;}}
+
+.typing-indicator{padding:4px 16px;font-size:12px;color:var(--text-dim);font-style:italic;height:20px;}
+
+/* ---------- Modals / bottom sheets ---------- */
+.overlay{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:20;display:flex;align-items:flex-end;}
+.sheet{background:var(--surface);width:100%;border-radius:18px 18px 0 0;padding:20px;max-height:80vh;overflow-y:auto;animation:slideup .2s ease-out;}
+@keyframes slideup{from{transform:translateY(100%);}to{transform:translateY(0);}}
+.sheet h2{font-size:17px;margin-bottom:16px;}
+.sheet .close-x{position:absolute;top:14px;right:16px;font-size:20px;color:var(--text-dim);}
+.sheet-item{display:flex;align-items:center;gap:14px;padding:13px 4px;font-size:15px;border-bottom:1px solid #1a2733;}
+.sheet-item:last-child{border-bottom:none;}
+.sheet-item .ic{font-size:20px;width:24px;text-align:center;}
+.link-box{display:flex;gap:8px;align-items:center;background:var(--surface-2);padding:10px 14px;border-radius:10px;margin:10px 0;}
+.link-box input{flex:1;font-size:13px;color:var(--text-dim);}
+.reaction-picker{display:flex;gap:10px;justify-content:space-around;padding:6px 0 16px;font-size:26px;}
+.reaction-picker span{transition:.1s;}
+.reaction-picker span:active{transform:scale(1.3);}
+.toast{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);background:#2a3a4d;padding:10px 18px;border-radius:20px;font-size:13px;z-index:50;animation:fadeout 2.5s forwards;}
+@keyframes fadeout{0%,70%{opacity:1;}100%{opacity:0;}}
+::-webkit-scrollbar{width:0;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ AUTH SCREEN ============ -->
+  <div id="authScreen">
+    <div class="auth-logo">HM</div>
+    <div class="auth-title" id="authTitle">Welcome to HM Chat</div>
+    <div class="auth-sub" id="authSub">Sign in to continue</div>
+    <div class="auth-error hidden" id="authError"></div>
+
+    <div id="loginFields">
+      <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="you@example.com"></div>
+      <div class="field"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••"></div>
+      <button class="btn-primary" onclick="doLogin()">Log In</button>
+      <div class="auth-switch">Don't have an account? <span onclick="toggleAuth(false)">Sign up</span></div>
+    </div>
+
+    <div id="registerFields" class="hidden">
+      <div class="field"><label>Username</label><input type="text" id="regUsername" placeholder="Your name"></div>
+      <div class="field"><label>Email</label><input type="email" id="regEmail" placeholder="you@example.com"></div>
+      <div class="field"><label>Password</label><input type="password" id="regPassword" placeholder="At least 4 characters"></div>
+      <button class="btn-primary" onclick="doRegister()">Create Account</button>
+      <div class="auth-switch">Already have an account? <span onclick="toggleAuth(true)">Log in</span></div>
+    </div>
+  </div>
+
+  <!-- ============ LIST SCREEN (contacts / groups) ============ -->
+  <div id="listScreen" class="hidden">
+    <div class="appbar">
+      <h1>HM Chat</h1>
+      <div class="icon-btn" onclick="openSettings()">⚙️</div>
+      <div class="avatar" id="myAvatar" onclick="openSettings()">?</div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" id="tabChats" onclick="switchTab('chats')">Chats</div>
+      <div class="tab" id="tabPeople" onclick="switchTab('people')">People</div>
+      <div class="tab" id="tabGroups" onclick="switchTab('groups')">Groups</div>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="searchBox" placeholder="Search people..." oninput="onSearch(this.value)">
+    </div>
+    <div class="list-body" id="listBody"></div>
+    <div class="fab" id="fabBtn" onclick="fabAction()">＋</div>
+  </div>
+
+  <!-- ============ CHAT SCREEN ============ -->
+  <div id="chatScreen">
+    <div class="chat-appbar">
+      <div class="icon-btn" onclick="closeChat()">←</div>
+      <div class="avatar" id="chatAvatar">?</div>
+      <div class="name-block">
+        <div class="n" id="chatName">Chat</div>
+        <div class="s" id="chatStatus"></div>
+      </div>
+      <div class="icon-btn" id="chatMenuBtn" onclick="openChatMenu()">⋮</div>
+    </div>
+    <div class="messages" id="messagesBody"></div>
+    <div class="typing-indicator" id="typingIndicator"></div>
+    <div class="composer">
+      <div class="round-btn" onclick="triggerFile('image')">📷</div>
+      <div class="round-btn" onclick="triggerFile('video')">🎬</div>
+      <textarea id="msgInput" rows="1" placeholder="Message" oninput="onTypingInput()" onkeydown="onComposerKey(event)"></textarea>
+      <div class="round-btn" id="voiceBtn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording(event)" ontouchend="stopRecording(event)">🎤</div>
+      <div class="round-btn send" onclick="sendTextMessage()">➤</div>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" class="hidden" accept="image/*">
+  <input type="file" id="fileInputVideo" class="hidden" accept="video/*">
+
+</div>
+
+<script>
+const API = ""; // same origin
+let TOKEN = localStorage.getItem("hm_token") || "";
+let ME = JSON.parse(localStorage.getItem("hm_me") || "null");
+let socket = null;
+let currentChat = null; // {type:'dm'|'group', id, name, avatar}
+let typingTimeout = null;
+let mediaRecorder = null, audioChunks = [], recStartTime = 0;
+let allGroups = [];
+let messageCache = {};   // id -> message object (for fast in-place updates)
+let pendingMessages = {}; // client_id -> DOM row (optimistic messages awaiting server echo)
+
+// ---------------- API helper ----------------
+async function api(path, opts={}) {
+  opts.headers = opts.headers || {};
+  if (TOKEN) opts.headers["Authorization"] = "Bearer " + TOKEN;
+  if (opts.body && !(opts.body instanceof FormData)) {
+    opts.headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(API + path, opts);
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+// ---------------- Boot ----------------
+window.addEventListener("DOMContentLoaded", () => {
+  if (TOKEN && ME) {
+    api("/api/me").then(r => { ME = r.user; saveSession(); showList(); connectSocket(); })
+      .catch(() => { logout(true); });
+  } else {
+    showAuth();
+  }
+});
+
+function saveSession(){
+  localStorage.setItem("hm_token", TOKEN);
+  localStorage.setItem("hm_me", JSON.stringify(ME));
+}
+
+function showAuth(){
+  document.getElementById("authScreen").classList.remove("hidden");
+  document.getElementById("listScreen").classList.add("hidden");
+  document.getElementById("chatScreen").classList.remove("active");
+}
+function showList(){
+  document.getElementById("authScreen").classList.add("hidden");
+  document.getElementById("listScreen").classList.remove("hidden");
+  document.getElementById("chatScreen").classList.remove("active");
+  setAvatarEl(document.getElementById("myAvatar"), ME);
+  switchTab("chats");
+}
+
+function toggleAuth(isLogin){
+  document.getElementById("authError").classList.add("hidden");
+  document.getElementById("loginFields").classList.toggle("hidden", !isLogin);
+  document.getElementById("registerFields").classList.toggle("hidden", isLogin);
+  document.getElementById("authTitle").textContent = isLogin ? "Welcome back" : "Create your account";
+  document.getElementById("authSub").textContent = isLogin ? "Sign in to continue" : "One account per email address";
+}
+
+function showAuthError(msg){
+  const el = document.getElementById("authError");
+  el.textContent = msg; el.classList.remove("hidden");
+}
+
+async function doRegister(){
+  const username = document.getElementById("regUsername").value.trim();
+  const email = document.getElementById("regEmail").value.trim();
+  const password = document.getElementById("regPassword").value;
+  try {
+    const r = await api("/api/register", {method:"POST", body: JSON.stringify({username,email,password})});
+    TOKEN = r.token; ME = r.user; saveSession();
+    showList(); connectSocket();
+  } catch(e){ showAuthError(e.message); }
+}
+
+async function doLogin(){
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  try {
+    const r = await api("/api/login", {method:"POST", body: JSON.stringify({email,password})});
+    TOKEN = r.token; ME = r.user; saveSession();
+    showList(); connectSocket();
+  } catch(e){ showAuthError(e.message); }
+}
+
+function logout(silent){
+  if (!silent) api("/api/logout", {method:"POST"}).catch(()=>{});
+  localStorage.removeItem("hm_token"); localStorage.removeItem("hm_me");
+  TOKEN = ""; ME = null;
+  if (socket) socket.disconnect();
+  showAuth();
+}
+
+// ---------------- Socket.IO realtime ----------------
+function connectSocket(){
+  socket = io({transports:["websocket","polling"]});
+  socket.on("connect", () => socket.emit("auth", {token: TOKEN}));
+  socket.on("new_message", handleIncomingMessage);
+  socket.on("message_deleted", handleMessageDeleted);
+  socket.on("message_reacted", handleMessageReacted);
+  socket.on("typing", handleTyping);
+  socket.on("error_msg", (d) => showToast(d.error));
+}
+
+// ---------------- Tabs / lists ----------------
+function switchTab(tab){
+  ["chats","people","groups"].forEach(t => document.getElementById("tab"+cap(t)).classList.toggle("active", t===tab));
+  document.getElementById("searchBox").placeholder = tab==="people" ? "Search people..." : (tab==="groups" ? "Search your groups..." : "Search...");
+  currentTab = tab;
+  loadList();
+}
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+let currentTab = "chats";
+
+async function loadList(){
+  const body = document.getElementById("listBody");
+  body.innerHTML = "<div class='empty-state'>Loading...</div>";
+  if (currentTab === "people") {
+    const r = await api("/api/users/search?q=" + encodeURIComponent(document.getElementById("searchBox").value));
+    renderPeople(r.users);
+  } else if (currentTab === "groups") {
+    const r = await api("/api/groups/mine");
+    allGroups = r.groups;
+    renderGroups(r.groups);
+  } else {
+    // "Chats" placeholder: show recent groups + hint to search people for DMs
+    const r = await api("/api/groups/mine");
+    allGroups = r.groups;
+    if (r.groups.length === 0) {
+      body.innerHTML = "<div class='empty-state'>No conversations yet.<br>Tap <b>People</b> to start a direct message, or use ＋ to create a group.</div>";
+    } else {
+      renderGroups(r.groups);
+    }
+  }
+}
+
+function onSearch(val){
+  if (currentTab === "people") loadList();
+  else if (currentTab === "groups") renderGroups(allGroups.filter(g => g.name.toLowerCase().includes(val.toLowerCase())));
+}
+
+function renderPeople(users){
+  const body = document.getElementById("listBody");
+  if (users.length===0){ body.innerHTML="<div class='empty-state'>No users found.</div>"; return; }
+  body.innerHTML = "";
+  users.forEach(u => {
+    const el = document.createElement("div");
+    el.className = "list-item";
+    el.onclick = () => openDM(u);
+    el.innerHTML = `
+      <div class="avatar">${avatarInner(u)}${u.status==='online'?'<div class="status-dot"></div>':''}</div>
+      <div class="list-item-content">
+        <div class="list-item-name">${escapeHtml(u.username)}</div>
+        <div class="list-item-sub">${u.status==='online'?'Online':'Offline'} · ${escapeHtml(u.email)}</div>
+      </div>`;
+    body.appendChild(el);
+  });
+}
+
+function renderGroups(groups){
+  const body = document.getElementById("listBody");
+  if (groups.length===0){ body.innerHTML="<div class='empty-state'>No groups yet. Tap ＋ to create one.</div>"; return; }
+  body.innerHTML = "";
+  groups.forEach(gr => {
+    const el = document.createElement("div");
+    el.className = "list-item";
+    el.onclick = () => openGroup(gr);
+    el.innerHTML = `
+      <div class="avatar">${gr.avatar ? `<img src="${gr.avatar}">` : gr.name.charAt(0).toUpperCase()}</div>
+      <div class="list-item-content">
+        <div class="list-item-name">${escapeHtml(gr.name)}</div>
+        <div class="list-item-sub">${gr.role==='admin'?'You are the admin':'Group chat'}${gr.has_password?' · 🔒':''}</div>
+      </div>`;
+    body.appendChild(el);
+  });
+}
+
+function avatarInner(u){
+  return u.avatar ? `<img src="${u.avatar}">` : (u.username||"?").charAt(0).toUpperCase();
+}
+function setAvatarEl(el, u){
+  el.innerHTML = avatarInner(u);
+}
+
+function fabAction(){
+  if (currentTab === "groups") openCreateGroupSheet();
+  else switchTab("people");
+}
+
+// ---------------- Open a chat ----------------
+function openDM(user){
+  currentChat = {type:"dm", id:user.id, name:user.username, avatar:user.avatar, status:user.status};
+  enterChatScreen();
+  api("/api/messages/dm/"+user.id).then(r => renderMessages(r.messages));
+  checkBlockStatus();
+}
+
+function openGroup(gr){
+  currentChat = {type:"group", id:gr.id, name:gr.name, avatar:gr.avatar, role:gr.role, invite_token:gr.invite_token};
+  enterChatScreen();
+  api("/api/messages/group/"+gr.id).then(r => renderMessages(r.messages));
+}
+
+function enterChatScreen(){
+  document.getElementById("listScreen").classList.add("hidden");
+  document.getElementById("chatScreen").classList.add("active");
+  document.getElementById("chatName").textContent = currentChat.name;
+  document.getElementById("chatStatus").textContent = currentChat.type==="dm" ? (currentChat.status==="online"?"Online":"Offline") : "Group";
+  setAvatarEl(document.getElementById("chatAvatar"), {username:currentChat.name, avatar:currentChat.avatar});
+  document.getElementById("messagesBody").innerHTML = "";
+  document.getElementById("typingIndicator").textContent = "";
+  document.getElementById("blockBanner")?.remove();
+  document.querySelector(".composer").style.display = "flex";
+  messageCache = {};
+  pendingMessages = {};
+}
+
+function closeChat(){
+  currentChat = null;
+  document.getElementById("chatScreen").classList.remove("active");
+  document.getElementById("listScreen").classList.remove("hidden");
+  loadList();
+}
+
+// ---------------- Messages rendering ----------------
+function renderMessages(msgs){
+  const body = document.getElementById("messagesBody");
+  body.innerHTML = "";
+  messageCache = {};
+  msgs.forEach(m => { messageCache[m.id] = m; body.appendChild(buildBubble(m)); });
+  body.scrollTop = body.scrollHeight;
+}
+
+function buildBubble(m){
+  const row = document.createElement("div");
+  const mine = m.sender_id === ME.id;
+  row.className = "bubble-row " + (mine ? "mine" : "theirs");
+  row.dataset.id = m.id;
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble" + (m.deleted ? " deleted" : "");
+  bubble.oncontextmenu = (e) => { e.preventDefault(); openMessageMenu(m, mine); };
+  let longPressTimer;
+  bubble.addEventListener("touchstart", () => { longPressTimer = setTimeout(()=>openMessageMenu(m, mine), 450); });
+  bubble.addEventListener("touchend", () => clearTimeout(longPressTimer));
+
+  let inner = "";
+  if (currentChat.type === "group" && !mine) inner += `<div class="sender">${escapeHtml(m.sender_name)}</div>`;
+  if (m.deleted) {
+    inner += "This message was deleted";
+  } else if (m.msg_type === "image") {
+    inner += `<img src="${m.media_path}" onclick="openMediaFull('${m.media_path}','image')">`;
+  } else if (m.msg_type === "video") {
+    inner += `<video src="${m.media_path}" controls></video>`;
+  } else if (m.msg_type === "voice") {
+    inner += `<audio src="${m.media_path}" controls></audio>`;
+  } else {
+    inner += escapeHtml(m.content);
+  }
+  inner += `<div class="time">${formatTime(m.timestamp)}</div>`;
+  bubble.innerHTML = inner;
+  renderReactionsInto(bubble, m);
+
+  row.appendChild(bubble);
+  return row;
+}
+
+function renderReactionsInto(bubble, m){
+  bubble.querySelector(".reactions-row")?.remove();
+  if (m.deleted || !m.reactions || !m.reactions.length) return;
+  const rr = document.createElement("div");
+  rr.className = "reactions-row";
+  const counts = {};
+  m.reactions.forEach(r => counts[r.emoji] = (counts[r.emoji]||0)+1);
+  Object.entries(counts).forEach(([emoji,count]) => {
+    const chip = document.createElement("span");
+    chip.className = "reaction-chip";
+    chip.textContent = emoji + (count>1 ? " "+count : "");
+    rr.appendChild(chip);
+  });
+  bubble.appendChild(rr);
+}
+
+// Instantly update one message's reactions in place, no network round trip.
+function updateReactionsUI(messageId, userId, emoji){
+  const m = messageCache[messageId];
+  if (!m) return;
+  m.reactions = m.reactions || [];
+  const existing = m.reactions.find(r => r.user_id === userId);
+  if (existing) existing.emoji = emoji;
+  else m.reactions.push({user_id: userId, emoji});
+  const row = document.querySelector(`.bubble-row[data-id="${messageId}"]`);
+  if (row) renderReactionsInto(row.querySelector(".bubble"), m);
+}
+
+function formatTime(ts){
+  const d = new Date(ts*1000);
+  return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+function escapeHtml(s){
+  const d = document.createElement("div"); d.textContent = s||""; return d.innerHTML;
+}
+
+// ---------------- Sending ----------------
+function onComposerKey(e){
+  if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendTextMessage(); }
+}
+function makeClientId(){
+  return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// Show the message instantly in the UI, before the server confirms it.
+function appendOptimistic(msgType, content, mediaPath){
+  const clientId = makeClientId();
+  const m = {
+    id: clientId, chat_type: currentChat.type,
+    chat_id: currentChat.type === "group" ? String(currentChat.id) : null,
+    sender_id: ME.id, sender_name: ME.username, sender_avatar: ME.avatar,
+    msg_type: msgType, content: content, media_path: mediaPath || "",
+    timestamp: Date.now()/1000, deleted: false, reactions: [], client_id: clientId,
+  };
+  const body = document.getElementById("messagesBody");
+  const row = buildBubble(m);
+  row.classList.add("pending");
+  row.dataset.id = clientId;
+  body.appendChild(row);
+  body.scrollTop = body.scrollHeight;
+  pendingMessages[clientId] = row;
+  return clientId;
+}
+
+function sendTextMessage(){
+  const input = document.getElementById("msgInput");
+  const text = input.value.trim();
+  if (!text || !currentChat) return;
+  if (document.getElementById("blockBanner")) { showToast("This conversation is unavailable"); return; }
+  const clientId = appendOptimistic("text", text, "");
+  socket.emit("send_message", {
+    chat_type: currentChat.type, target: currentChat.id,
+    msg_type: "text", content: text, client_id: clientId
+  });
+  input.value = "";
+}
+
+function onTypingInput(){
+  if (!currentChat) return;
+  socket.emit("typing", {chat_type: currentChat.type, target: currentChat.id});
+}
+
+function triggerFile(kind){
+  const input = kind==="image" ? document.getElementById("fileInput") : document.getElementById("fileInputVideo");
+  input.onchange = () => uploadAndSend(input.files[0], kind);
+  input.click();
+}
+
+async function uploadAndSend(file, kind){
+  if (!file || !currentChat) return;
+  if (document.getElementById("blockBanner")) { showToast("This conversation is unavailable"); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await api("/api/upload", {method:"POST", body: fd});
+    const clientId = appendOptimistic(kind, "", r.path);
+    socket.emit("send_message", {
+      chat_type: currentChat.type, target: currentChat.id,
+      msg_type: kind, content: "", media_path: r.path, client_id: clientId
+    });
+  } catch(e){ showToast(e.message); }
+}
+
+// ---------------- Voice recording ----------------
+async function startRecording(e){
+  if (e) e.preventDefault();
+  if (!currentChat) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (ev) => audioChunks.push(ev.data);
+    mediaRecorder.start();
+    recStartTime = Date.now();
+    document.getElementById("voiceBtn").classList.add("recording");
+  } catch(err){ showToast("Microphone access denied"); }
+}
+function stopRecording(e){
+  if (e) e.preventDefault();
+  if (!mediaRecorder || mediaRecorder.state==="inactive") return;
+  document.getElementById("voiceBtn").classList.remove("recording");
+  const duration = Date.now() - recStartTime;
+  mediaRecorder.onstop = async () => {
+    if (duration < 500) return; // too short, ignore accidental tap
+    const blob = new Blob(audioChunks, {type:"audio/webm"});
+    const file = new File([blob], "voice.webm", {type:"audio/webm"});
+    await uploadAndSend(file, "voice");
+  };
+  mediaRecorder.stop();
+}
+
+// ---------------- Realtime handlers ----------------
+function handleIncomingMessage(m){
+  const belongsToOpenChat = currentChat && (
+    (currentChat.type === "dm" && m.chat_type === "dm" && (m.sender_id === currentChat.id || m.sender_id === ME.id)) ||
+    (currentChat.type === "group" && m.chat_type === "group" && String(currentChat.id) === m.chat_id)
+  );
+  if (!belongsToOpenChat) {
+    if (m.sender_id !== ME.id) showToast("New message from " + m.sender_name);
+    return;
+  }
+
+  // If this is the server echo of our own optimistic message, upgrade the
+  // existing bubble in place instead of appending a duplicate.
+  if (m.client_id && pendingMessages[m.client_id]) {
+    const row = pendingMessages[m.client_id];
+    delete pendingMessages[m.client_id];
+    row.dataset.id = m.id;
+    row.classList.remove("pending");
+    messageCache[m.id] = m;
+    return;
+  }
+
+  messageCache[m.id] = m;
+  const body = document.getElementById("messagesBody");
+  body.appendChild(buildBubble(m));
+  body.scrollTop = body.scrollHeight;
+}
+function handleMessageDeleted(d){
+  const m = messageCache[d.message_id];
+  if (m) { m.deleted = true; m.content = ""; m.media_path = ""; }
+  const row = document.querySelector(`.bubble-row[data-id="${d.message_id}"]`);
+  if (row) {
+    const bubble = row.querySelector(".bubble");
+    bubble.className = "bubble deleted";
+    bubble.innerHTML = "This message was deleted";
+  }
+}
+function handleMessageReacted(d){
+  // Updates the DOM directly -- no network round trip, so it's instant.
+  updateReactionsUI(d.message_id, d.user_id, d.emoji);
+}
+function handleTyping(d){
+  const el = document.getElementById("typingIndicator");
+  el.textContent = "typing...";
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(() => el.textContent = "", 2000);
+}
+
+// ---------------- Message long-press menu ----------------
+function openMessageMenu(m, mine){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.onclick = (e) => { if (e.target===overlay) overlay.remove(); };
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+  let html = `<h2>Message</h2><div class="reaction-picker">
+    ${["👍","❤️","😂","😮","😢","🙏"].map(e=>`<span onclick="reactToMessage(${m.id},'${e}')">${e}</span>`).join("")}
+  </div>`;
+  if (mine && !m.deleted) {
+    html += `<div class="sheet-item" onclick="deleteMessage(${m.id})"><span class="ic">🗑️</span> Delete message</div>`;
+  }
+  sheet.innerHTML = html;
+  overlay.appendChild(sheet);
+  document.getElementById("app").appendChild(overlay);
+}
+function reactToMessage(id, emoji){
+  socket.emit("react_message", {message_id:id, emoji});
+  document.querySelector(".overlay")?.remove();
+}
+function deleteMessage(id){
+  socket.emit("delete_message", {message_id:id});
+  document.querySelector(".overlay")?.remove();
+}
+function openMediaFull(src, type){
+  window.open(src, "_blank");
+}
+
+// ---------------- Chat menu (group info / invite / block) ----------------
+async function openChatMenu(){
+  let blockStatus = {i_blocked: false};
+  if (currentChat.type === "dm") {
+    blockStatus = await api("/api/block/status/"+currentChat.id).catch(()=>({i_blocked:false}));
+  }
+
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.onclick = (e) => { if (e.target===overlay) overlay.remove(); };
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+  let html = `<h2>${escapeHtml(currentChat.name)}</h2>`;
+
+  if (currentChat.type === "group") {
+    html += `<div class="sheet-item" onclick="viewGroupMembers()"><span class="ic">👥</span> View members</div>`;
+    html += `<div class="sheet-item" onclick="shareInviteLink()"><span class="ic">🔗</span> Share invite link</div>`;
+    if (currentChat.role === "admin") {
+      html += `<div class="sheet-item" onclick="changeGroupAvatarPrompt()"><span class="ic">🖼️</span> Change group photo</div>`;
+    }
+  } else if (blockStatus.i_blocked) {
+    html += `<div class="sheet-item" onclick="unblockFromChat()"><span class="ic">✅</span> Unblock user</div>`;
+  } else {
+    html += `<div class="sheet-item" onclick="blockCurrentUser()"><span class="ic">🚫</span> Block user</div>`;
+  }
+  sheet.innerHTML = html;
+  overlay.appendChild(sheet);
+  document.getElementById("app").appendChild(overlay);
+}
+
+async function checkBlockStatus(){
+  if (!currentChat || currentChat.type !== "dm") return;
+  try {
+    const r = await api("/api/block/status/"+currentChat.id);
+    updateBlockBanner(r.i_blocked, r.they_blocked);
+  } catch(e){ /* ignore */ }
+}
+
+function updateBlockBanner(iBlocked, theyBlocked){
+  const composer = document.querySelector(".composer");
+  let banner = document.getElementById("blockBanner");
+  if (iBlocked || theyBlocked) {
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "blockBanner";
+      banner.style.cssText = "padding:10px 16px;background:rgba(255,82,82,.12);color:var(--danger);font-size:13px;text-align:center;flex-shrink:0;";
+      document.getElementById("chatScreen").insertBefore(banner, composer);
+    }
+    banner.textContent = iBlocked
+      ? "You blocked this user. Unblock them to send new messages."
+      : "You can't send messages in this conversation.";
+    composer.style.display = "none";
+  } else if (banner) {
+    banner.remove();
+    composer.style.display = "flex";
+  }
+}
+
+async function viewGroupMembers(){
+  document.querySelector(".overlay")?.remove();
+  const r = await api("/api/groups/"+currentChat.id+"/members");
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.onclick = (e) => { if (e.target===overlay) overlay.remove(); };
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+  let html = "<h2>Members</h2>";
+  r.members.forEach(m => {
+    html += `<div class="sheet-item"><span class="ic">${avatarInner(m)}</span> ${escapeHtml(m.username)} ${m.role==='admin'?' · Admin':''}</div>`;
+  });
+  sheet.innerHTML = html;
+  overlay.appendChild(sheet);
+  document.getElementById("app").appendChild(overlay);
+}
+
+function shareInviteLink(){
+  document.querySelector(".overlay")?.remove();
+  const link = window.location.origin + "/?join=" + currentChat.invite_token;
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.onclick = (e) => { if (e.target===overlay) overlay.remove(); };
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+  sheet.innerHTML = `<h2>Invite link</h2>
+    <div class="link-box"><input readonly value="${link}" id="inviteLinkInput"></div>
+    <button class="btn-primary" onclick="copyInviteLink()">Copy link</button>`;
+  overlay.appendChild(sheet);
+  document.getElementById("app").appendChild(overlay);
+}
+function copyInviteLink(){
+  const input = document.getElementById("inviteLinkInput");
+  input.select();
+  navigator.clipboard.writeText(input.value).then(()=> showToast("Link copied"));
+}
+
+function changeGroupAvatarPrompt(){
+  document.querySelector(".overlay")?.remove();
+  const input = document.getElementById("fileInput");
+  input.onchange = async () => {
+    const fd = new FormData(); fd.append("avatar", input.files[0]);
+    try {
+      const r = await api("/api/groups/"+currentChat.id+"/avatar", {method:"POST", body: fd});
+      currentChat.avatar = r.avatar;
+      setAvatarEl(document.getElementById("chatAvatar"), {username:currentChat.name, avatar:r.avatar});
+      showToast("Group photo updated");
+    } catch(e){ showToast(e.message); }
+  };
+  input.click();
+}
+
+async function blockCurrentUser(){
+  document.querySelector(".overlay")?.remove();
+  try {
+    await api("/api/block", {method:"POST", body: JSON.stringify({user_id: currentChat.id})});
+    showToast("User blocked");
+    checkBlockStatus();
+  } catch(e){ showToast(e.message); }
+}
+
+async function unblockFromChat(){
+  document.querySelector(".overlay")?.remove();
+  try {
+    await api("/api/unblock", {method:"POST", body: JSON.stringify({user_id: currentChat.id})});
+    showToast("User unblocked");
+    checkBlockStatus();
+  } catch(e){ showToast(e.message); }
+}
+
+// ---------------- Create group ----------------
+function openCreateGroupSheet(){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.onclick = (e) => { if (e.target===overlay) overlay.remove(); };
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+  sheet.innerHTML = `
+    <h2>New group</h2>
+    <div class="field"><label>Group name</label><input id="newGroupName" placeholder="e.g. Weekend Trip"></div>
+    <div class="field"><label>Admin password (optional)</label><input id="newGroupPass" type="password" placeholder="Required to join via link"></div>
+    <button class="btn-primary" onclick="submitCreateGroup()">Create group</button>`;
+  overlay.appendChild(sheet);
+  document.getElementById("app").appendChild(overlay);
+}
+async function submitCreateGroup(){
+  const name = document.getElementById("newGroupName").value.trim();
+  const password = document.getElementById("newGroupPass").value;
+  if (!name) return showToast("Group name required");
+  try {
+    await api("/api/groups", {method:"POST", body: JSON.stringify({name, password})});
+    document.querySelector(".overlay")?.remove();
+    switchTab("groups");
+  } catch(e){ showToast(e.message); }
+}
+
+// ---------------- Settings (profile) ----------------
+function openSettings(){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.onclick = (e) => { if (e.target===overlay) overlay.remove(); };
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+  sheet.innerHTML = `
+    <h2>Your profile</h2>
+    <div style="text-align:center;margin-bottom:16px;">
+      <div class="avatar" style="width:80px;height:80px;font-size:30px;margin:0 auto 10px;" id="settingsAvatar">${avatarInner(ME)}</div>
+      <button class="btn-primary" style="width:auto;padding:8px 18px;font-size:13px;" onclick="document.getElementById('avatarUpload').click()">Change photo</button>
+      <input type="file" id="avatarUpload" class="hidden" accept="image/*">
+    </div>
+    <div class="field"><label>Username</label><input id="settingsUsername" value="${escapeHtml(ME.username)}"></div>
+    <div class="field"><label>Email</label><input value="${escapeHtml(ME.email)}" disabled style="opacity:.6;"></div>
+    <button class="btn-primary" onclick="saveProfile()">Save changes</button>
+    <div class="sheet-item" onclick="viewBlockedList()"><span class="ic">🚫</span> Blocked users</div>
+    <div class="sheet-item" style="color:var(--danger);" onclick="logout()"><span class="ic">🚪</span> Log out</div>`;
+  overlay.appendChild(sheet);
+  document.getElementById("app").appendChild(overlay);
+
+  document.getElementById("avatarUpload").onchange = async (e) => {
+    const fd = new FormData(); fd.append("avatar", e.target.files[0]);
+    const r = await api("/api/profile", {method:"POST", body: fd});
+    ME = r.user; saveSession();
+    document.getElementById("settingsAvatar").innerHTML = avatarInner(ME);
+    setAvatarEl(document.getElementById("myAvatar"), ME);
+  };
+}
+async function saveProfile(){
+  const username = document.getElementById("settingsUsername").value.trim();
+  const fd = new FormData(); fd.append("username", username);
+  const r = await api("/api/profile", {method:"POST", body: fd});
+  ME = r.user; saveSession();
+  setAvatarEl(document.getElementById("myAvatar"), ME);
+  showToast("Profile updated");
+  document.querySelector(".overlay")?.remove();
+}
+async function viewBlockedList(){
+  document.querySelector(".overlay")?.remove();
+  const r = await api("/api/blocked");
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.onclick = (e) => { if (e.target===overlay) overlay.remove(); };
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+  let html = "<h2>Blocked users</h2>";
+  if (r.users.length===0) html += "<div class='empty-state'>No blocked users</div>";
+  r.users.forEach(u => {
+    html += `<div class="sheet-item">${escapeHtml(u.username)}
+      <button style="margin-left:auto;color:var(--primary);font-size:13px;" onclick="unblockUser(${u.id})">Unblock</button></div>`;
+  });
+  sheet.innerHTML = html;
+  overlay.appendChild(sheet);
+  document.getElementById("app").appendChild(overlay);
+}
+async function unblockUser(id){
+  await api("/api/unblock", {method:"POST", body: JSON.stringify({user_id:id})});
+  viewBlockedList();
+}
+
+// ---------------- Toast ----------------
+function showToast(msg){
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  document.getElementById("app").appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+// ---------------- Join-via-link handling (?join=TOKEN) ----------------
+window.addEventListener("load", () => {
+  const params = new URLSearchParams(window.location.search);
+  const joinToken = params.get("join");
+  if (joinToken && TOKEN) {
+    setTimeout(() => promptJoinGroup(joinToken), 600);
+  } else if (joinToken) {
+    localStorage.setItem("hm_pending_join", joinToken);
+  }
+});
+function promptJoinGroup(token){
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+  sheet.innerHTML = `
+    <h2>Join group</h2>
+    <div class="field"><label>Group password (if any)</label><input type="password" id="joinPass"></div>
+    <button class="btn-primary" onclick="submitJoinGroup('${token}')">Join</button>`;
+  overlay.appendChild(sheet);
+  document.getElementById("app").appendChild(overlay);
+}
+async function submitJoinGroup(token){
+  const password = document.getElementById("joinPass").value;
+  try {
+    await api("/api/groups/join/"+token, {method:"POST", body: JSON.stringify({password})});
+    document.querySelector(".overlay")?.remove();
+    showToast("Joined group");
+    switchTab("groups");
+  } catch(e){ showToast(e.message); }
+}
+</script>
+</body>
+</html>
